@@ -110,6 +110,37 @@ IsRDPActive() => WinActive("ahk_exe mstsc.exe")
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; 実行セッション判定
+;
+;   このスクリプトはローカル PC とリモート PC の両方で同時に動作することが
+;   ある (例: ローカルに AHK をインストール済み、かつ RDP 接続先のリモート
+;   PC でも同じスクリプトが起動している)。
+;   その場合、ローカル AHK のキーボードフックが F13 系ホットキーを横取り
+;   してしまい、キーストロークが RDP 経由でリモートに届かなくなる。
+;
+;   そこで「自分自身がローカル(コンソール)で動いている」かつ「アクティブ
+;   ウィンドウが RDP クライアント」のときは、ローカル側のホットキーを
+;   無効化してキーをリモートに素通しさせる。
+;   これにより:
+;     - リモート PC で動く AHK (RDP セッション内) → 常時有効
+;     - ローカル PC、RDP ウィンドウ前面               → 無効 (リモートに譲る)
+;     - ローカル PC、それ以外                         → 有効 (普段使い)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+; この AHK プロセスがローカル PC (コンソール) で動いているか
+;   SM_REMOTESESSION (0x1000) = RDP セッション内なら 0 以外
+;   起動時に一度だけ判定し static でキャッシュ
+IsLocalConsole() {
+    static cached := !DllCall("GetSystemMetrics", "Int", 0x1000)
+    return cached
+}
+
+; ローカル PC で動作中、かつ RDP クライアントが前面のとき真
+;   このとき、ローカル AHK は F13 系ホットキーをリモートに譲る
+ShouldYieldToRDP() => IsLocalConsole() && IsRDPActive()
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Emacs風コマンドのコアヘルパ
 ;
 ;   SendMove        : 移動キーをマーク状態に応じて Shift 修飾付き/無しで送る
@@ -133,13 +164,21 @@ DeleteRange(rangeKey) {
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; ※ 特定アプリ (PuTTY, Vim, GVIM, Emacs, RDP 等) でこのEmacsキーバインドを
-;    無効にしたい場合は、以下のキーバインド全体を #HotIf で囲ってください:
+; ※ 特定アプリ (PuTTY, Vim, GVIM, Emacs 等) でこの Emacs キーバインドを
+;    無効にしたい場合は、下の #HotIf に条件を追加してください。例:
 ;
-;      #HotIf !(WinActive("ahk_class PuTTY") || WinActive("ahk_class Vim"))
-;      ; ... (Emacsキーバインド) ...
-;      #HotIf
+;      #HotIf !ShouldYieldToRDP()
+;            && !WinActive("ahk_class PuTTY")
+;            && !WinActive("ahk_class Vim")
+;
+;    なお RDP については ShouldYieldToRDP() が自動で処理するので
+;    個別指定は不要です。
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+; ===== ここから先のホットキーは、ローカル PC で RDP ウィンドウが前面のとき
+;       無効化される。リモート PC で動作中の AHK は常に有効。 =====
+#HotIf !ShouldYieldToRDP()
 
 
 ;==================== AutoHotkey 制御 ====================
@@ -267,3 +306,7 @@ F13 & WheelUp::Send("{Blind}^{WheelUp}")
 F13 & WheelDown::Send("{Blind}^{WheelDown}")
 F13 & WheelLeft::Send("{Blind}^{WheelLeft}")
 F13 & WheelRight::Send("{Blind}^{WheelRight}")
+
+
+; ===== ホットキー定義領域おわり =====
+#HotIf

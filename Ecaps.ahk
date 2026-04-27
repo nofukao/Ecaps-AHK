@@ -1,0 +1,242 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Ecaps.ahk  ―  Emacs風キーバインド on Windows  (AutoHotkey v2)
+;
+;   日本語109キーボードを前提に、CapsLock を物理的に F13 (scancode 0x0064)
+;   に割り当てた上で、F13 + key の組合せで Unix シェル / Emacs 風の
+;   キーバインドを提供する。
+;
+;   本物の Ctrl は極力使わないので、Windows 既定のショートカット
+;   (Ctrl+S 等) は従来通り動作する。
+;
+;   設定方法:
+;     1. ChangeKey 等で物理 CapsLock キーに F13 (scancode 0x0064) を割当て
+;     2. 本スクリプトを適当なフォルダに配置 (例: OneDrive\bin\AutoHotkey)
+;     3. Win+R → shell:startup でスタートアップに登録
+;
+;   forked from https://github.com/usi3/emacs.ahk
+;                                                  2022.09 - / N. Fukao
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+#Requires AutoHotkey v2.0
+#SingleInstance Force
+#UseHook
+
+InstallKeybdHook()
+SetKeyDelay(0)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; 状態管理 — Set Mark (選択モード)
+;
+;   F13+Space で切り替わるトグル。アクティブな間、移動キーは Shift 修飾
+;   付きで送出され、選択範囲を伸ばせる。編集系コマンド実行時に自動でOFF。
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+class Mark {
+    static Active := false
+    static Toggle() => Mark.Active := !Mark.Active
+    static Reset()  => Mark.Active := false
+}
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; IME 制御
+;
+;   アクティブウィンドウの IME ウィンドウに WM_IME_CONTROL を送出して
+;   ON/OFF や入力モードを直接切り替える。
+;   参考: https://namayakegadget.com/765/
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+; 低レベル: IMEウィンドウに WM_IME_CONTROL メッセージを送る
+;   wParam : 0x0006=IMC_SETOPENSTATUS, 0x0002=IMC_SETCONVERSIONMODE
+SendIMEControl(wParam, lParam, winTitle := "A") {
+    hwnd := WinExist(winTitle)
+    if WinActive(winTitle) {
+        ; GUITHREADINFO : cbSize(4) + flags(4) + HWND×6 + RECT(16)
+        gti := Buffer(4 + 4 + A_PtrSize * 6 + 16, 0)
+        NumPut("UInt", gti.Size, gti, 0)            ; cbSize
+        if DllCall("GetGUIThreadInfo", "UInt", 0, "Ptr", gti)
+            hwnd := NumGet(gti, 8 + A_PtrSize, "UPtr")  ; hwndFocus
+    }
+    return DllCall("SendMessage"
+        , "Ptr",  DllCall("imm32\ImmGetDefaultIMEWnd", "Ptr", hwnd, "Ptr")
+        , "UInt", 0x0283       ; WM_IME_CONTROL
+        , "Int",  wParam
+        , "Int",  lParam)
+}
+
+; IME ON / OFF
+SetIME(open)         => SendIMEControl(0x6, open ? 1 : 0)
+
+; 入力モード設定
+;   0:半角英数, 3:全角英数, 9:全角ひらがな, 11:全角カタカナ, 27:半角カタカナ
+SetIMEConvMode(mode) => SendIMEControl(0x2, mode)
+
+; 日本語入力 ON (ただし入力モードは半角英数で待機)
+IMEOn() {
+    SetIME(true)
+    Sleep(50)
+    SetIMEConvMode(0)
+}
+
+; 日本語入力 OFF
+IMEOff() => SetIME(false)
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Emacs風コマンドのコアヘルパ
+;
+;   SendMove        : 移動キーをマーク状態に応じて Shift 修飾付き/無しで送る
+;   SendAndUnmark   : 任意のキー列を送出した後にマーク状態を解除
+;   DeleteRange     : (Shift+移動) → Del で範囲削除 (kill-line / kill-word 等)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+SendMove(key) => Send((Mark.Active ? "+" : "") . key)
+
+SendAndUnmark(keys) {
+    Send(keys)
+    Mark.Reset()
+}
+
+DeleteRange(rangeKey) {
+    Send("+" . rangeKey)
+    Sleep(50)             ; この値は環境依存
+    Send("{Del}")
+    Mark.Reset()
+}
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; ※ 特定アプリ (PuTTY, Vim, GVIM, Emacs, RDP 等) でこのEmacsキーバインドを
+;    無効にしたい場合は、以下のキーバインド全体を #HotIf で囲ってください:
+;
+;      #HotIf !(WinActive("ahk_class PuTTY") || WinActive("ahk_class Vim"))
+;      ; ... (Emacsキーバインド) ...
+;      #HotIf
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+;==================== AutoHotkey 制御 ====================
+; サスペンド (トグル) : F13+@, Pause, Ctrl+@
+;
+; v2 では「ホットキー本体が Suspend のみ」でも自動除外されないため、
+; #SuspendExempt で明示的にサスペンド対象から外す必要がある。
+; これを忘れるとサスペンド ON 後に解除用ホットキーまで停止してしまう。
+;
+; v2 既定のサスペンド時トレイアイコンは v1 の "S" 文字と異なり
+; 「透明な H」に変わるだけで状態が判別しづらいので、ToggleSuspend() で
+; 明示的に切替える。AutoHotkey 実行ファイル (A_AhkPath) に埋め込まれている
+; アイコンを利用するので、複数 PC への配布も追加ファイル無しで完結する。
+;   index 1 : 既定の H アイコン
+;   index 2 : サスペンド時アイコン (透明な H ―― 一番見分けが付きやすい)
+#SuspendExempt
+F13 & @::ToggleSuspend()
+Pause::ToggleSuspend()
+^@::ToggleSuspend()
+#SuspendExempt False
+
+ToggleSuspend() {
+    Suspend(-1)
+    if A_IsSuspended
+        TraySetIcon(A_AhkPath, 2, true)   ; サスペンドアイコン (Freeze=true で固定)
+    else
+        TraySetIcon(A_AhkPath, 1, true)   ; 既定アイコン
+}
+
+
+;==================== カーソル移動 ====================
+; F13 + fbnp / ae : 一文字・行頭行末
+F13 & f::SendMove("{Right}")
+F13 & b::SendMove("{Left}")
+F13 & n::SendMove("{Down}")
+F13 & p::SendMove("{Up}")
+F13 & a::SendMove("{Home}")
+F13 & e::SendMove("{End}")
+
+; Alt + fbnp / <> : 単語単位・半画面・文書先頭末尾
+!f::SendMove("^{Right}")
+!b::SendMove("^{Left}")
+!n::SendMove("^{PgDn}")
+!p::SendMove("^{PgUp}")
+!<::SendMove("^{Home}")
+!>::SendMove("^{End}")
+
+
+;==================== Set Mark (選択モード) ====================
+F13 & Space::Mark.Toggle()
+
+
+;==================== 削除 ====================
+F13 & d::SendAndUnmark("{Del}")     ; 右一文字
+F13 & h::SendAndUnmark("{BS}")      ; 左一文字
+F13 & k::DeleteRange("{End}")       ; 行末まで (kill-line)
+F13 & u::DeleteRange("{Home}")      ; 行頭まで
+!d::DeleteRange("^{Right}")         ; 単語末まで (kill-word)
+!h::DeleteRange("^{Left}")          ; 単語頭まで (backward-kill-word)
+
+
+;==================== 改行・タブ・エスケープ ====================
+~Enter::Mark.Reset()                          ; Enterは素通しで Mark のみ解除
+F13 & m::SendAndUnmark("{Enter}")             ; Ctrl+m 風 改行
+F13 & t::SendAndUnmark("{Tab}")
+F13 & [::SendAndUnmark("{Esc}")
+F13 & g::SendAndUnmark("{Esc}")               ; Emacs C-g (キャンセル)
+
+
+;==================== カット・コピー・ペースト ====================
+F13 & x::SendAndUnmark("^x")        ; カット
+F13 & w::SendAndUnmark("^x")        ; カット (Emacs C-w)
+F13 & c::SendAndUnmark("^c")        ; コピー
+!w::SendAndUnmark("^c")             ; コピー (Emacs M-w)
+F13 & v::SendAndUnmark("^v")        ; ペースト
+F13 & y::SendAndUnmark("^v")        ; ペースト (Emacs C-y / Yank)
+
+
+;==================== ファンクションキー (F13 + 数字) ====================
+F13 & 1::Send("{F1}")
+F13 & 2::Send("{F2}")
+F13 & 3::Send("{F3}")
+F13 & 4::Send("{F4}")
+F13 & 5::Send("{F5}")
+F13 & 6::Send("{F6}")
+F13 & 7::Send("{F7}")
+F13 & 8::Send("{F8}")
+F13 & 9::Send("{F9}")
+F13 & 0::Send("{F10}")
+
+
+;==================== IME ON/OFF ====================
+F13 & j::IMEOn()      ; 日本語入力 ON (半角英数モードで待機)
+^!j::IMEOn()
+F13 & i::IMEOff()     ; 日本語入力 OFF
+^!i::IMEOff()
+
+
+;==================== 上書き保存・Undo ====================
+F13 & s::Send("{Blind}^s")          ; 上書き保存 (Save)
+F13 & /::Send("{Blind}^z")          ; Undo
+
+
+;==================== その他 — Ctrl+キー としてフォールバック ====================
+; 上で定義していない F13+キー は、通常の Ctrl+キー として動作させる。
+; これにより、CapsLock を Ctrl 代わりに使った汎用ショートカットも有効。
+F13 & -::Send("{Blind}^-")
+F13 & =::Send("{Blind}^=")
+F13 & q::Send("{Blind}^q")
+F13 & o::Send("{Blind}^o")
+F13 & }::Send("{Blind}^{]}")
+F13 & \::Send("{Blind}^{\}")
+F13 & l::Send("{Blind}^l")
+F13 & sc027::Send("{Blind}^{sc027}")
+F13 & '::Send("{Blind}^'")
+F13 & z::Send("{Blind}^z")
+F13 & ,::Send("{Blind}^,")
+F13 & .::Send("{Blind}^.")
+
+; マウス: F13 + マウス操作 → Ctrl + マウス操作 (拡大縮小等に有用)
+F13 & LButton::Send("{Blind}^{LButton}")
+F13 & RButton::Send("{Blind}^{RButton}")
+F13 & MButton::Send("{Blind}^{MButton}")
+F13 & WheelUp::Send("{Blind}^{WheelUp}")
+F13 & WheelDown::Send("{Blind}^{WheelDown}")
+F13 & WheelLeft::Send("{Blind}^{WheelLeft}")
+F13 & WheelRight::Send("{Blind}^{WheelRight}")

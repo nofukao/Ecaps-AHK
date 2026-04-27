@@ -1,6 +1,6 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Ecaps.ahk  ―  Emacs風キーバインド on Windows  (AutoHotkey v2)
-;
+;                                   2022/09 - / N.Fukao
 ;   日本語109キーボードを前提に、CapsLock を物理的に F13 (scancode 0x0064)
 ;   に割り当てた上で、F13 + key の組合せで Unix シェル / Emacs 風の
 ;   キーバインドを提供する。
@@ -13,8 +13,6 @@
 ;     2. 本スクリプトを適当なフォルダに配置 (例: OneDrive\bin\AutoHotkey)
 ;     3. Win+R → shell:startup でスタートアップに登録
 ;
-;   forked from https://github.com/usi3/emacs.ahk
-;                                                  2022.09 - / N. Fukao
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 #Requires AutoHotkey v2.0

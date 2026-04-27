@@ -6,7 +6,7 @@ Windows 上で Emacs / Unix シェル風のキーバインドを実現する Aut
 
 - **対象**: AutoHotkey **v2.0** 以降
 - **前提**: 日本語 109 キーボード
-- **作者**: 深尾 (Norihisa Fukao)
+- **作者**: nofukao
 
 ---
 

@@ -72,14 +72,43 @@ SetIME(open)         => SendIMEControl(0x6, open ? 1 : 0)
 SetIMEConvMode(mode) => SendIMEControl(0x2, mode)
 
 ; 日本語入力 ON (ただし入力モードは半角英数で待機)
+;   ローカル : WM_IME_CONTROL でモードまで含めて一発設定
+;   RDP 経由 : Windows メッセージは遠隔 PC へ転送されないので、キー入力で
+;              4 ステップの決定論的シーケンスを送る:
+;                ① VK_IME_OFF  (vk1A)  — IME を強制 OFF (既知状態に揃える)
+;                ② 半角/全角   (vk19)  — IME を ON、MS-IME 既定で ひらがな
+;                ③ Shift+無変換 (vk1D) — ひらがな → 全角英数
+;                ④ Shift+無変換 (vk1D) — 全角英数 → 半角英数
+;              ※「半角/全角 で IME が ひらがな で立ち上がる」前提が必要。
+;                MS-IME 設定で「前回モードを記憶」が ON だと崩れる可能性あり。
 IMEOn() {
-    SetIME(true)
-    Sleep(50)
-    SetIMEConvMode(0)
+    if IsRDPActive() {
+        Send "{vk1A}"          ; ① OFF 強制
+        Sleep(50)
+        Send "{vk19}"          ; ② 半角/全角 で IME ON (→ ひらがな)
+        Sleep(50)
+        Send "+{vk1D}"         ; ③ Shift+無変換  ひらがな → 全角英数
+        Sleep(30)
+        Send "+{vk1D}"         ; ④ Shift+無変換  全角英数 → 半角英数
+    } else {
+        SetIME(true)
+        Sleep(50)
+        SetIMEConvMode(0)
+    }
 }
 
 ; 日本語入力 OFF
-IMEOff() => SetIME(false)
+;   RDP 経由は VK_IME_OFF (0x1A) を Send。明示 OFF (非トグル)。
+IMEOff() {
+    if IsRDPActive() {
+        Send "{vk1A}"
+    } else {
+        SetIME(false)
+    }
+}
+
+; アクティブウィンドウが RDP クライアント (mstsc.exe) かどうか
+IsRDPActive() => WinActive("ahk_exe mstsc.exe")
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

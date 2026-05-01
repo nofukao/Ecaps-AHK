@@ -293,7 +293,7 @@ F13 & }::Send("{Blind}^{]}")
 F13 & \::Send("{Blind}^{\}")
 F13 & l::Send("{Blind}^l")
 F13 & sc027::Send("{Blind}^{sc027}")
-F13 & '::Send("{Blind}^'")
+; F13 & '::Send("{Blind}^'")    ; JP 109 では ' = Shift+7 のため F13 & 7 と衝突する。無効化。
 F13 & z::Send("{Blind}^z")
 F13 & ,::Send("{Blind}^,")
 F13 & .::Send("{Blind}^.")

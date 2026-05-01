@@ -143,9 +143,10 @@ ShouldYieldToRDP() => IsLocalConsole() && IsRDPActive()
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Emacs風コマンドのコアヘルパ
 ;
-;   SendMove        : 移動キーをマーク状態に応じて Shift 修飾付き/無しで送る
-;   SendAndUnmark   : 任意のキー列を送出した後にマーク状態を解除
-;   DeleteRange     : (Shift+移動) → Del で範囲削除 (kill-line / kill-word 等)
+;   SendMove             : 移動キーをマーク状態に応じて Shift 修飾付き/無しで送る
+;   SendAndUnmark        : 任意のキー列を送出した後にマーク状態を解除
+;   SendAndUnmarkShifted : Shift 押下時のみ別キー列を送る (Tab / Shift+Tab 等)
+;   DeleteRange          : (Shift+移動) → Del で範囲削除 (kill-line / kill-word 等)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 SendMove(key) => Send((Mark.Active ? "+" : "") . key)
@@ -154,6 +155,12 @@ SendAndUnmark(keys) {
     Send(keys)
     Mark.Reset()
 }
+
+; AHK のカスタムコンボ (F13 & X) にはモディファイア前置記号 (+ ! ^ #) を
+; 付けられない。Shift で分岐したい場合はハンドラ内で物理キー状態を見る
+; 必要があるため、その定型をここに括り出す。
+SendAndUnmarkShifted(plain, shifted) =>
+    GetKeyState("Shift", "P") ? SendAndUnmark(shifted) : SendAndUnmark(plain)
 
 DeleteRange(rangeKey) {
     Send("+" . rangeKey)
@@ -243,7 +250,7 @@ F13 & u::DeleteRange("{Home}")      ; 行頭まで
 ;==================== 改行・タブ・エスケープ ====================
 ~Enter::Mark.Reset()                          ; Enterは素通しで Mark のみ解除
 F13 & m::SendAndUnmark("{Enter}")             ; Ctrl+m 風 改行
-F13 & t::SendAndUnmark("{Tab}")
+F13 & t::SendAndUnmarkShifted("{Tab}", "+{Tab}")    ; Shift 押下時は Shift+Tab (逆方向タブ)
 F13 & [::SendAndUnmark("{Esc}")
 F13 & g::SendAndUnmark("{Esc}")               ; Emacs C-g (キャンセル)
 

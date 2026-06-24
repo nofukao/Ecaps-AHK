@@ -290,7 +290,7 @@ F13 & g::SendAndUnmark("{Esc}")               ; Emacs C-g (キャンセル)
 F13 & x::SendAndUnmark("^x")        ; カット
 F13 & w::SendAndUnmark(IsConsole() ? "^w" : "^x")   ; カット / 端末:kill-region (Ctrl+W)
 F13 & c::SendAndUnmark("^c")        ; コピー (端末では Ctrl+C=SIGINT で正しい)
-!w::SendAndUnmark("^c")             ; コピー (Emacs M-w)
+!w::SendAndUnmark(IsConsole() ? "!w" : "^c")   ; コピー (Emacs M-w) / 端末:Alt+w=kill-ring-save
 F13 & v::SendAndUnmark("^v")        ; ペースト
 F13 & y::SendAndUnmark(IsConsole() ? "^y" : "^v")   ; ペースト / 端末:yank (Ctrl+Y)
 

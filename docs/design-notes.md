@@ -169,6 +169,7 @@ readline は Emacs キーをエミュレートしているので、**端末で�
 | `F13+k` | `Shift+End`→Del | `Ctrl+K`（kill-line） |
 | `F13+Space` | `Mark.Toggle()` | `Ctrl+Space`（set-mark） |
 | `F13+w` | `Ctrl+X` | `Ctrl+W`（kill-region） |
+| `Alt+w` | `Ctrl+C` | `Alt+w`（M-w = kill-ring-save / コピー） |
 | `F13+y` | `Ctrl+V` | `Ctrl+Y`（yank） |
 | `Alt+d` | `Ctrl+Shift+Right`→Del | `Alt+d`（kill-word） |
 | `Alt+h` | `Ctrl+Shift+Left`→Del | `Ctrl+W`（backward-kill-word） |
@@ -177,6 +178,7 @@ readline は Emacs キーをエミュレートしているので、**端末で�
 
 - **Windows Terminal は「ローカル PowerShell」と「SSH 先 bash」を同一ウィンドウで扱い、ウィンドウ属性から区別できない**。端末用キーは両方に送られる。Ctrl+U/K/W/Y/Space は PSReadLine の Emacs 編集モード（`Set-PSReadLineOption -EditMode Emacs`）で readline と一致するので、ローカル側を Emacs モードにすると整合する。
 - **`F13+c` は変更しない**: 端末では `Ctrl+C`=SIGINT で、それがむしろ正しい挙動。
+- **`Alt+w`（コピー）は端末で本物の `Alt+w`(M-w) を送る**: GUI 用の `Ctrl+C` を emacs -nw に送ると `C-c`（プレフィックスキー）待ちになりコピーできない。emacs のリージョンコピーは `M-w`=kill-ring-save なので、端末ではそのまま `Alt+w` を送る（bash readline では未割当で無害）。`!w::` から `Send("!w")` しても、既定 SendLevel では自ホットキーを再発火しない（`!d` と同型）。
 - **`F13+x` / `F13+v` はスコープ外（現状維持）**: 端末で `F13+v`=`Ctrl+V` は quoted-insert になり不適切だが、今回は触らない。将来、端末ペースト（WT=`Ctrl+Shift+V` / PuTTY=`Shift+Insert`）へ振る余地あり。
 - **`F13+d`(Del) / `F13+h`(BS) はそのままで端末でも正しい**ので分岐不要。
 

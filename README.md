@@ -117,7 +117,7 @@ Windows のレジストリレベルで CapsLock を F13 (scancode `0x0064`) に�
 | `F13 + Space` | **選択モード開始 / 終了** | 押下後、移動キーで範囲選択（端末: `Ctrl+Space` = set-mark） |
 | `F13 + w` | カット (Ctrl+X) | Emacs `C-w`（端末: `Ctrl+W` = kill-region） |
 | `F13 + x` | カット (Ctrl+X) | Windows 互換 |
-| `Alt + w` | コピー (Ctrl+C) | Emacs `M-w` |
+| `Alt + w` | コピー (Ctrl+C) | Emacs `M-w`（端末: `Alt+w` = kill-ring-save。emacs 等で有効） |
 | `F13 + c` | コピー (Ctrl+C) | Windows 互換（端末では `Ctrl+C` = 中断/SIGINT） |
 | `F13 + y` | ペースト (Ctrl+V) | Emacs `C-y` (Yank)（端末: `Ctrl+Y` = yank） |
 | `F13 + v` | ペースト (Ctrl+V) | Windows 互換 |

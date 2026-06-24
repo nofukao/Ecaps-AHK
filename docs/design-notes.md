@@ -135,6 +135,52 @@ F13 & '::Send("{Blind}^'")          ; 同じ sc008 に登録 → 後勝ち
 
 ---
 
+## 3.5 ターミナル/コンソール分岐（GUI と端末で送るキーを変える）
+
+### 背景
+
+本スクリプトの編集系は当初すべて **GUI 流の idiom** で実装されていた:
+
+- 範囲削除（kill-line / kill-word）= **(Shift+移動) → Del** の「選択してから削除」
+- カット/コピー/ペースト = **Ctrl+X / Ctrl+C / Ctrl+V**（クリップボード）
+- Set Mark = 自前の `Mark.Active` トグル＋移動キーに Shift を付加して選択拡張
+
+これは GUI エディタや **ローカル PowerShell の PSReadLine** では動くが、**ターミナルの行編集器（Linux の readline/bash、PuTTY 等）では破綻する**。端末には「選択範囲」も「クリップボード」も存在せず、行編集は **制御文字（readline = Emacs 由来の割当）** で行うのが唯一の方法だから。
+
+具体的な破綻:
+
+| 操作 | GUI 送出 | 端末での結果 |
+|---|---|---|
+| `F13+u` 行頭まで削除 | `Shift+Home` → `Del` | WT→SSH: `ESC[1;2H` 等が解釈できず末尾文字が漏れる / PuTTY: Shift 無視で Home へ移動し 1 文字削除 |
+| `F13+k` 行末まで削除 | `Shift+End` → `Del` | WT→SSH: `ESC[1;2F` の末尾 `F` が入力される / PuTTY: End へ移動するだけ |
+| `F13+Space`→`w`(C-x)→`y`(C-v) | クリップボード | Ctrl+X/V は端末でクリップボードにならず効かない（Ctrl+V は quoted-insert） |
+
+readline は Emacs キーをエミュレートしているので、**端末では Emacs/readline の制御キーをそのまま送れば 1:1 で正しく動く**。
+
+### 実装
+
+- **`IsConsole()`**: アクティブウィンドウが端末/コンソールかを判定（`WindowsTerminal.exe` / `OpenConsole.exe` / `ahk_class PuTTY` / `ConsoleWindowClass`(cmd・PowerShell) / `mintty.exe` / `ttermpro.exe`）。`IsRDPActive()` と同じ要領。
+- **`KillToEdge(consoleKey, guiRangeKey)`**: 端末なら `SendAndUnmark(consoleKey)`、GUI なら従来の `DeleteRange(guiRangeKey)`。
+- **`SendMove`**: 端末では Mark 中でも Shift を付けない（readline は mark〜point を region として持つ）。
+
+| F13/Alt 操作 | GUI | 端末（readline） |
+|---|---|---|
+| `F13+u` | `Shift+Home`→Del | `Ctrl+U`（backward-kill-line） |
+| `F13+k` | `Shift+End`→Del | `Ctrl+K`（kill-line） |
+| `F13+Space` | `Mark.Toggle()` | `Ctrl+Space`（set-mark） |
+| `F13+w` | `Ctrl+X` | `Ctrl+W`（kill-region） |
+| `F13+y` | `Ctrl+V` | `Ctrl+Y`（yank） |
+| `Alt+d` | `Ctrl+Shift+Right`→Del | `Alt+d`（kill-word） |
+| `Alt+h` | `Ctrl+Shift+Left`→Del | `Ctrl+W`（backward-kill-word） |
+
+### 制約・判断
+
+- **Windows Terminal は「ローカル PowerShell」と「SSH 先 bash」を同一ウィンドウで扱い、ウィンドウ属性から区別できない**。端末用キーは両方に送られる。Ctrl+U/K/W/Y/Space は PSReadLine の Emacs 編集モード（`Set-PSReadLineOption -EditMode Emacs`）で readline と一致するので、ローカル側を Emacs モードにすると整合する。
+- **`F13+c` は変更しない**: 端末では `Ctrl+C`=SIGINT で、それがむしろ正しい挙動。
+- **`F13+x` / `F13+v` はスコープ外（現状維持）**: 端末で `F13+v`=`Ctrl+V` は quoted-insert になり不適切だが、今回は触らない。将来、端末ペースト（WT=`Ctrl+Shift+V` / PuTTY=`Shift+Insert`）へ振る余地あり。
+- **`F13+d`(Del) / `F13+h`(BS) はそのままで端末でも正しい**ので分岐不要。
+
+
 ## 4. RDP セッション周りの注意
 
 `Ecaps.ahk` はローカル PC / RDP 接続先 PC の双方で同時起動されることを想定:

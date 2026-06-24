@@ -33,6 +33,7 @@ Windows 上で Emacs / Unix シェル風のキーバインドを実現する Aut
 - ホームポジションを崩さず Emacs 風カーソル移動・編集
 - `F13 + Space` で **Set Mark**（選択モード）— Emacs の挙動を再現
 - 日本語入力の **ON / OFF を直接制御**（トグルではない確定動作）
+- **ターミナル/コンソール** (Windows Terminal, PuTTY, cmd, Git Bash 等) では、削除・選択・カット/ペーストを Unix シェル (readline) 流の制御キーへ自動で切り替え
 - リモートデスクトップ (mstsc.exe) 配下でも IME 制御が動作
 - 未定義の `F13 + キー` は自動的に `Ctrl + キー` にフォールバック
 - マウス操作も `F13 + クリック / ホイール` → `Ctrl + …` にマップ（拡大縮小等）
@@ -72,6 +73,8 @@ Windows のレジストリレベルで CapsLock を F13 (scancode `0x0064`) に�
 
 `F13 + Space` で選択モードのトグルが切り替わります。アクティブな間はカーソル移動キーが `Shift + 矢印` として送出され、範囲選択を伸ばせます。コピー・カット・編集系のコマンドを実行すると自動的にリセットされます。
 
+ターミナル/コンソールでは仕組みが異なり、`F13 + Space` は readline の set-mark（`Ctrl+Space`）を送り、移動キーは `Shift` を付けずにそのまま送出します（端末は mark〜カーソル間を region として扱うため）。詳細は [ターミナル/コンソールでの挙動](#ターミナルコンソールでの挙動) を参照。
+
 ---
 
 ## キーバインド一覧
@@ -99,10 +102,10 @@ Windows のレジストリレベルで CapsLock を F13 (scancode `0x0064`) に�
 |---|---|---|
 | `F13 + d` | カーソル右の 1 文字を削除 (Del) | delete-char |
 | `F13 + h` | カーソル左の 1 文字を削除 (BS) | backward-delete-char |
-| `F13 + k` | カーソル位置から行末まで削除 | kill-line |
-| `F13 + u` | 行頭からカーソル位置まで削除 | — |
-| `Alt + d` | カーソル位置から単語末まで削除 | kill-word |
-| `Alt + h` | 単語頭からカーソル位置まで削除 | backward-kill-word |
+| `F13 + k` | カーソル位置から行末まで削除 | kill-line（端末: `Ctrl+K`） |
+| `F13 + u` | 行頭からカーソル位置まで削除 | 端末: `Ctrl+U` |
+| `Alt + d` | カーソル位置から単語末まで削除 | kill-word（端末: `Alt+d`） |
+| `Alt + h` | 単語頭からカーソル位置まで削除 | backward-kill-word（端末: `Ctrl+W`） |
 | `F13 + m` | 改行 (Enter) | newline |
 | `F13 + t` | タブ (Tab) | — |
 | `F13 + /` | 元に戻す (Ctrl+Z) | undo |
@@ -111,12 +114,12 @@ Windows のレジストリレベルで CapsLock を F13 (scancode `0x0064`) に�
 
 | キー操作 | 動作 | 備考 |
 |---|---|---|
-| `F13 + Space` | **選択モード開始 / 終了** | 押下後、移動キーで範囲選択（Shift 押し下げ維持） |
-| `F13 + w` | カット (Ctrl+X) | Emacs `C-w` |
+| `F13 + Space` | **選択モード開始 / 終了** | 押下後、移動キーで範囲選択（端末: `Ctrl+Space` = set-mark） |
+| `F13 + w` | カット (Ctrl+X) | Emacs `C-w`（端末: `Ctrl+W` = kill-region） |
 | `F13 + x` | カット (Ctrl+X) | Windows 互換 |
 | `Alt + w` | コピー (Ctrl+C) | Emacs `M-w` |
-| `F13 + c` | コピー (Ctrl+C) | Windows 互換 |
-| `F13 + y` | ペースト (Ctrl+V) | Emacs `C-y` (Yank) |
+| `F13 + c` | コピー (Ctrl+C) | Windows 互換（端末では `Ctrl+C` = 中断/SIGINT） |
+| `F13 + y` | ペースト (Ctrl+V) | Emacs `C-y` (Yank)（端末: `Ctrl+Y` = yank） |
 | `F13 + v` | ペースト (Ctrl+V) | Windows 互換 |
 | `F13 + g` | キャンセル (Esc) | Emacs `C-g` |
 | `F13 + [` | エスケープ (Esc) | — |
@@ -185,6 +188,64 @@ Windows の IME ステータスを **直接制御** します。「半角/全角
 ### 選択モード (Mark) の挙動
 
 `F13 + Space` で内部状態 `Mark.Active` が `true` になり、以降のカーソル移動コマンドは `Shift + 矢印` として送信されます。コピー・カット・改行・削除など編集系の操作を行うと自動でリセットされます。`Enter` キー単独でもリセットされる仕様です。
+
+### ターミナル/コンソールでの挙動
+
+GUI アプリの行編集は「**選択してから削除**」「**クリップボード**」で行いますが、ターミナルの行編集器（Linux の `readline`/bash、PuTTY など）には選択範囲もクリップボードも存在しません。これらは Emacs 由来の**制御文字**（`Ctrl+U` / `Ctrl+K` / `Ctrl+W` / `Ctrl+Y` / `Ctrl+Space` …）で編集します。
+
+そのためアクティブウィンドウがターミナル/コンソールのときは、削除・選択・カット/ペーストを自動で readline 流の制御キーに切り替えます（GUI 流の「Shift+移動 → Del」「Ctrl+X/V」を送ると、端末では文字化けや誤動作になるため）。
+
+| 判定対象 | 例 |
+|---|---|
+| Windows Terminal | `WindowsTerminal.exe` / `OpenConsole.exe` |
+| PuTTY | ウィンドウクラス `PuTTY` |
+| 旧コンソール | `cmd` / `PowerShell`（`ConsoleWindowClass`） |
+| Git Bash / Cygwin / WSL | `mintty.exe` |
+| Tera Term | `ttermpro.exe` |
+
+#### 注意点：中で動くプログラムまでは判定できない
+
+ターミナルが前面かどうかは判定できますが、**その中で動いているのが bash なのか emacs なのかローカルシェルなのかまでは AHK からは分かりません**。送る制御キーは同じでも、受け手のプログラムごとに意味が変わります。
+
+| 中で動くもの | `F13+k`（Ctrl+K） | `F13+u`（Ctrl+U） |
+|---|---|---|
+| **bash（readline）** | 行末まで削除 ✅ | 行頭まで削除 ✅ |
+| **emacs -nw** | `C-k` = kill-line（行の途中で有効） | `C-u` = universal-argument（数引数。emacs には「行頭まで削除」の標準キーが無い） |
+| **ローカル cmd / 既定の PowerShell** | 未割当 → `^K` がそのまま表示 | 未割当 → `^U` がそのまま表示 |
+
+- **emacs -nw** では F13 は実質 Ctrl として働き、**emacs 本来のキー**になります（これは仕様です）。`F13+k`(C-k) は行の途中にカーソルがあれば kill-line として効きます（行末では消す対象が無く無反応に見えます）。`F13+u`(C-u) は emacs の数引数（universal-argument）で、行頭まで削除する標準キーは emacs 側に存在しません。
+- **ローカルの cmd / PowerShell** で `^U` `^K` がそのまま入力されてしまう場合は、下記「PowerShell を SSH 先と一致させる」を参照してください（`cmd.exe` は行編集の制御キーを持たないため非対応）。
+
+> **Windows Terminal の制約**: 同一ウィンドウで「ローカル PowerShell」と「SSH 先 Linux」を扱うため、両者をウィンドウ属性から区別できません。端末用の制御キーは両方に送られます。SSH 先（bash）が正しく動く一方、ローカルシェルでは設定次第で `^U`/`^K` になる、というトレードオフが残ります（PuTTY は常に readline なので問題ありません）。
+
+#### PowerShell を SSH 先と一致させる（PSReadLine の Emacs モード）
+
+ローカル PowerShell を SSH 先（readline）と同じ挙動にするには、PSReadLine を **Emacs 編集モード**にします。これで `Ctrl+U`(行頭まで) / `Ctrl+K`(行末まで) / `Ctrl+W` / `Ctrl+Y` / `Ctrl+Space` が bash と同じ意味になります。
+
+> この設定は **Windows ターミナルの設定画面ではなく、PowerShell のプロファイル**（起動時に毎回読み込まれる `.ps1`）に書きます。
+
+**1. プロファイルに追記**（PowerShell タブで実行。無ければ作成して 1 行追記）
+
+```powershell
+if (!(Test-Path $PROFILE)) { New-Item -ItemType File -Path $PROFILE -Force }
+Add-Content -Path $PROFILE -Value 'Set-PSReadLineOption -EditMode Emacs'
+```
+
+**2. スクリプト実行を許可**（Windows PowerShell は既定でプロファイル `.ps1` の実行がブロックされ、起動時に `PSSecurityException`／「スクリプトの実行が無効」エラーになります）
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned   # 確認に Y。管理者権限は不要
+```
+
+`RemoteSigned` は「ローカルで自分が作った `.ps1` は実行可・ダウンロードした未署名スクリプトは不可」という安全寄りの設定です。
+
+**3. 反映**：新しい PowerShell タブを開く（または現タブで `. $PROFILE`）。
+
+補足:
+- プロファイルの実体パスは `$PROFILE` で確認できます（通常 `…\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1`）。手で編集するなら `notepad $PROFILE`。
+- 現在の実行ポリシーは `Get-ExecutionPolicy -List` で確認できます。
+- **PowerShell 7 (`pwsh`)** は別プロファイル（`…\Documents\PowerShell\…`）なので、使う場合はそちらにも同じ追記が必要です。
+- 会社管理 PC 等で `MachinePolicy`/`UserPolicy` により実行ポリシーがロックされている場合は変更できません。
 
 ### サスペンド時のトレイアイコン
 

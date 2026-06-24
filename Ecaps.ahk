@@ -110,6 +110,28 @@ IsRDPActive() => WinActive("ahk_exe mstsc.exe")
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; ターミナル / コンソール判定
+;
+;   GUI アプリの行編集は「選択してから削除」「クリップボード」で行うが、
+;   ターミナルの行編集器 (Linux の readline/bash, PuTTY 等) には選択範囲も
+;   クリップボードも存在しない。これらは Emacs 由来の制御文字
+;   (Ctrl+U/K/W/Y/Space …) で編集する。よって端末が前面のときは、編集系
+;   コマンドを GUI 流ではなく readline 流の制御キーで送り分ける。
+;
+;   注意: Windows Terminal は「ローカル PowerShell」と「SSH 先 bash」を同一
+;   ウィンドウで扱うため、ウィンドウ属性からは両者を区別できない。端末用キーは
+;   どちらにも送られる (詳細は docs/design-notes.md)。
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+IsConsole() =>
+       WinActive("ahk_exe WindowsTerminal.exe")    ; Windows Terminal
+    || WinActive("ahk_exe OpenConsole.exe")        ; Windows Terminal (旧/別ホスト)
+    || WinActive("ahk_class PuTTY")                ; PuTTY
+    || WinActive("ahk_class ConsoleWindowClass")   ; 旧 conhost (cmd / PowerShell)
+    || WinActive("ahk_exe mintty.exe")             ; Git Bash / Cygwin / WSL
+    || WinActive("ahk_exe ttermpro.exe")           ; Tera Term
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; 実行セッション判定
 ;
 ;   このスクリプトはローカル PC とリモート PC の両方で同時に動作することが
@@ -149,7 +171,9 @@ ShouldYieldToRDP() => IsLocalConsole() && IsRDPActive()
 ;   DeleteRange          : (Shift+移動) → Del で範囲削除 (kill-line / kill-word 等)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-SendMove(key) => Send((Mark.Active ? "+" : "") . key)
+; 端末では Shift+移動 は選択にならない (readline は mark で region を持つ) ので
+; Mark 中でも Shift を付けず、素の移動キーを送る。
+SendMove(key) => Send(((Mark.Active && !IsConsole()) ? "+" : "") . key)
 
 SendAndUnmark(keys) {
     Send(keys)
@@ -168,6 +192,12 @@ DeleteRange(rangeKey) {
     Send("{Del}")
     Mark.Reset()
 }
+
+; 範囲削除 (kill-line / kill-word 等) を端末/GUI で送り分ける:
+;   端末 → readline の制御キーをそのまま送る (例 行末まで=Ctrl+K)
+;   GUI  → 従来どおり (Shift+移動)→Del の選択削除
+KillToEdge(consoleKey, guiRangeKey) =>
+    IsConsole() ? SendAndUnmark(consoleKey) : DeleteRange(guiRangeKey)
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -235,16 +265,17 @@ F13 & e::SendMove("{End}")
 
 
 ;==================== Set Mark (選択モード) ====================
-F13 & Space::Mark.Toggle()
+; 端末では readline の set-mark (Ctrl+Space) を送る。GUI では自前の選択トグル。
+F13 & Space::IsConsole() ? Send("^{Space}") : Mark.Toggle()
 
 
 ;==================== 削除 ====================
 F13 & d::SendAndUnmark("{Del}")     ; 右一文字
 F13 & h::SendAndUnmark("{BS}")      ; 左一文字
-F13 & k::DeleteRange("{End}")       ; 行末まで (kill-line)
-F13 & u::DeleteRange("{Home}")      ; 行頭まで
-!d::DeleteRange("^{Right}")         ; 単語末まで (kill-word)
-!h::DeleteRange("^{Left}")          ; 単語頭まで (backward-kill-word)
+F13 & k::KillToEdge("^k", "{End}")      ; 行末まで (kill-line)  端末:Ctrl+K
+F13 & u::KillToEdge("^u", "{Home}")     ; 行頭まで              端末:Ctrl+U
+!d::KillToEdge("!d", "^{Right}")        ; 単語末まで (kill-word) 端末:Alt+d
+!h::KillToEdge("^w", "^{Left}")         ; 単語頭まで (backward-kill-word) 端末:Ctrl+W
 
 
 ;==================== 改行・タブ・エスケープ ====================
@@ -257,11 +288,11 @@ F13 & g::SendAndUnmark("{Esc}")               ; Emacs C-g (キャンセル)
 
 ;==================== カット・コピー・ペースト ====================
 F13 & x::SendAndUnmark("^x")        ; カット
-F13 & w::SendAndUnmark("^x")        ; カット (Emacs C-w)
-F13 & c::SendAndUnmark("^c")        ; コピー
+F13 & w::SendAndUnmark(IsConsole() ? "^w" : "^x")   ; カット / 端末:kill-region (Ctrl+W)
+F13 & c::SendAndUnmark("^c")        ; コピー (端末では Ctrl+C=SIGINT で正しい)
 !w::SendAndUnmark("^c")             ; コピー (Emacs M-w)
 F13 & v::SendAndUnmark("^v")        ; ペースト
-F13 & y::SendAndUnmark("^v")        ; ペースト (Emacs C-y / Yank)
+F13 & y::SendAndUnmark(IsConsole() ? "^y" : "^v")   ; ペースト / 端末:yank (Ctrl+Y)
 
 
 ;==================== ファンクションキー (F13 + 数字) ====================

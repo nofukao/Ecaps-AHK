@@ -13,6 +13,17 @@
 ;     2. 本スクリプトを適当なフォルダに配置 (例: OneDrive\bin\AutoHotkey)
 ;     3. Win+R → shell:startup でスタートアップに登録
 ;
+;   設定方法2 (任意):
+;     PowerShell(PS)をEmacs編集モードにし、bashと同じ挙動にする。
+;     1. PSターミナルを開く。(管理者権限は不要)
+;     2. PSプロンプトで以下の3行について、行頭"> "の次からを切り取って、順に貼り付けて実行する。
+;        > if (!(Test-Path $PROFILE)) { New-Item -ItemType File -Path $PROFILE -Force }
+;        > Add-Content -Path $PROFILE -Value 'Set-PSReadLineOption -EditMode Emacs'
+;        > Set-ExecutionPolicy -Scope CurrentUser RemoteSigned -Force
+;       (最初の2行はプロファイルの追記。最後の1行はスクリプトの実行を許可。)
+;     3. PSターミナルを再起動する。
+;        これで、Ctrl+U(行頭まで削除)、Ctrl+K(行末まで削除)等が動作するようになる。
+;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 #Requires AutoHotkey v2.0

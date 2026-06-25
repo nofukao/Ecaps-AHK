@@ -61,6 +61,18 @@ Windows のレジストリレベルで CapsLock を F13 (scancode `0x0064`) に�
 2. `Win + R` → `shell:startup` を実行してスタートアップフォルダを開く
 3. `Ecaps.ahk` のショートカットをそこに配置 → Windows 起動時に自動実行されます
 
+### 4. (任意) PowerShell を Emacs 編集モードにする
+
+ローカル PowerShell を bash（SSH 先の readline）と同じ行編集にすると、`F13 + u`(行頭まで削除) / `F13 + k`(行末まで削除) などが PowerShell でも期待どおり動きます。PowerShell タブで以下を実行します（管理者権限は不要）。
+
+```powershell
+if (!(Test-Path $PROFILE)) { New-Item -ItemType File -Path $PROFILE -Force }
+Add-Content -Path $PROFILE -Value 'Set-PSReadLineOption -EditMode Emacs'
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned -Force
+```
+
+新しい PowerShell タブを開くと反映されます。背景・補足（`RemoteSigned` の意味、PowerShell 7 の別プロファイル等）は [PowerShell を SSH 先と一致させる](#powershell-を-ssh-先と一致させるpsreadline-の-emacs-モード) を参照してください。
+
 ---
 
 ## 基本概念
@@ -224,6 +236,14 @@ GUI アプリの行編集は「**選択してから削除**」「**クリップ�
 
 > この設定は **Windows ターミナルの設定画面ではなく、PowerShell のプロファイル**（起動時に毎回読み込まれる `.ps1`）に書きます。
 
+実行する 3 行の役割:
+
+| コマンド | 役割 |
+|---|---|
+| `if (!(Test-Path $PROFILE)) { New-Item -ItemType File -Path $PROFILE -Force }` | プロファイル未作成なら作成（親フォルダも自動生成。`-Force` は未存在時のみ実行されるので既存ファイルは壊さない） |
+| `Add-Content -Path $PROFILE -Value 'Set-PSReadLineOption -EditMode Emacs'` | 起動時に PSReadLine を Emacs 編集モードへ（`Ctrl+U`=行頭まで削除 / `Ctrl+K`=行末まで削除 等が有効化） |
+| `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned -Force` | プロファイル（`.ps1`）の実行を許可（既定の `Restricted` では読み込まれない。`-Force` で確認プロンプトを省略） |
+
 **1. プロファイルに追記**（PowerShell タブで実行。無ければ作成して 1 行追記）
 
 ```powershell
@@ -234,8 +254,10 @@ Add-Content -Path $PROFILE -Value 'Set-PSReadLineOption -EditMode Emacs'
 **2. スクリプト実行を許可**（Windows PowerShell は既定でプロファイル `.ps1` の実行がブロックされ、起動時に `PSSecurityException`／「スクリプトの実行が無効」エラーになります）
 
 ```powershell
-Set-ExecutionPolicy -Scope CurrentUser RemoteSigned   # 確認に Y。管理者権限は不要
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned -Force   # 管理者権限は不要
 ```
+
+> `-Force` は変更確認の `[Y/N]` プロンプトを省略します（無人で実行可能）。
 
 `RemoteSigned` は「ローカルで自分が作った `.ps1` は実行可・ダウンロードした未署名スクリプトは不可」という安全寄りの設定です。
 

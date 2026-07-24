@@ -1,4 +1,4 @@
-# Ecaps-AHK
+# Ecaps
 
 Windows 上で Emacs / Unix シェル風のキーバインドを実現する AutoHotkey v2 スクリプト。
 
